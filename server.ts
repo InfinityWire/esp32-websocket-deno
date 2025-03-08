@@ -1,3 +1,6 @@
+// Lista para rastrear todos los clientes conectados
+const clients = new Set<WebSocket>();
+
 Deno.serve({ port: 8080 }, (req) => {
     if (req.headers.get("upgrade") !== "websocket") {
         return new Response("Not a WebSocket request", { status: 400 });
@@ -7,13 +10,14 @@ Deno.serve({ port: 8080 }, (req) => {
 
     socket.onopen = () => {
         console.log("Nuevo cliente conectado");
+        clients.add(socket); // Agregar cliente a la lista
     };
 
     socket.onmessage = (event) => {
         const msgString = event.data.toString();
         console.log("Recibido:", msgString);
         // Reenviar a todos los clientes
-        for (const client of wss.clients) {
+        for (const client of clients) {
             if (client.readyState === WebSocket.OPEN) {
                 client.send(msgString);
             }
@@ -22,12 +26,13 @@ Deno.serve({ port: 8080 }, (req) => {
 
     socket.onclose = () => {
         console.log("Cliente desconectado");
+        clients.delete(socket); // Eliminar cliente de la lista
     };
 
     socket.onerror = (error) => {
         console.error("Error:", error);
+        clients.delete(socket); // Limpiar en caso de error
     };
 
-    const wss = socket; // Guardamos referencia para broadcasting
     return response;
 });
