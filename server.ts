@@ -13,16 +13,15 @@ Deno.serve({ port: 8080 }, (req) => {
         clients.add(socket); // Agregar cliente a la lista
     };
 
-    socket.onmessage = (event) => {
-        const msgString = event.data.toString();
-        console.log("Recibido:", msgString);
-        // Reenviar a todos los clientes
-        for (const client of clients) {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(msgString);
-            }
+socket.onmessage = (event) => {
+    const msgString = event.data.toString();
+    console.log("Recibido:", msgString);
+    for (const client of clients) {
+        if (client !== socket && client.readyState === WebSocket.OPEN) { // Excluir al emisor
+            client.send(msgString);
         }
-    };
+    }
+};
 
     socket.onclose = () => {
         console.log("Cliente desconectado");
