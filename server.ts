@@ -1,5 +1,5 @@
-// Usar Deno KV para broadcasting global
-const kv = await Deno.openKv();
+// Lista para rastrear todos los clientes conectados
+const clients = new Set<WebSocket>();
 
 Deno.serve({ port: 8080 }, (req) => {
     if (req.headers.get("upgrade") !== "websocket") {
@@ -10,40 +10,29 @@ Deno.serve({ port: 8080 }, (req) => {
 
     socket.onopen = () => {
         console.log("Nuevo cliente conectado");
+        clients.add(socket); // Agregar cliente a la lista
     };
 
-    socket.onmessage = async (event) => {
+    socket.onmessage = (event) => {
         const msgString = event.data.toString();
         console.log("Recibido:", msgString);
-        // Almacenar mensaje en KV con timestamp único
-        const timestamp = Date.now();
-        await kv.set(["messages", timestamp], { sender: socket, message: msgString });
+        // Reenviar solo a los otros clientes
+        for (const client of clients) {
+            if (client !== socket && client.readyState === WebSocket.OPEN) {
+                client.send(msgString);
+            }
+        }
     };
 
     socket.onclose = () => {
         console.log("Cliente desconectado");
+        clients.delete(socket); // Eliminar cliente de la lista
     };
 
     socket.onerror = (error) => {
         console.error("Error:", error);
+        clients.delete(socket); // Limpiar en caso de error
     };
-
-    // Escuchar mensajes en KV y reenviarlos
-    const broadcast = async () => {
-        for await (const entry of kv.watch([["messages"]])) {
-            for (const { key, value } of entry) {
-                if (value && value.message && socket.readyState === WebSocket.OPEN) {
-                    // No enviar al cliente que originó el mensaje
-                    if (value.sender !== socket) {
-                        socket.send(value.message);
-                    }
-                    // Limpiar mensaje procesado
-                    await kv.delete(key);
-                }
-            }
-        }
-    };
-    broadcast();
 
     return response;
 });
